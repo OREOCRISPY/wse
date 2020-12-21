@@ -15,6 +15,8 @@ public class Assignment2 {
     static int quantiBit=0;
     static int quantiFuc=0;
     static int useQuant=0;
+    static double[] expQuant;
+    static double base;
     static HashMap<Integer,Integer> page=new HashMap<>();
 
 /**
@@ -359,6 +361,8 @@ public class Assignment2 {
             int previou_docid=0;
             ArrayList<LinkedList<Byte>> temp_docid=new ArrayList<>();
             ArrayList<LinkedList<Byte>> temp_fre=new ArrayList<>();
+            ArrayList<Double> temp_fre_quant=new ArrayList<>();
+            List<Double>Scorestatic=new ArrayList<>();
             int lastDocid=0;
             for(int j=0;j<BlockSize;j++) {
                 int cur_index=BlockSize*index+j;
@@ -388,12 +392,25 @@ public class Assignment2 {
                 }
                 else{
                     double Score=calScore(previou_docid,frequency,numDoc);
+                    temp_fre_quant.add(Score);
+                    Scorestatic.add(Score);
                 }
             }
             index++;
             int cur_blocksize=0;
             for(int j=0;j<temp_docid.size();j++){
-                cur_blocksize=cur_blocksize+temp_docid.get(j).size()+temp_fre.get(j).size();
+                if(useQuant==0) {
+                    cur_blocksize = cur_blocksize + temp_docid.get(j).size() + temp_fre.get(j).size();
+                }
+                else{
+                    int quantizationSize=1;
+                    int count=quantiBit;
+                    while (count>8){
+                        quantizationSize++;
+                        count=count-8;
+                    }
+                    cur_blocksize = cur_blocksize + temp_docid.get(j).size() + quantizationSize;
+                }
             }
             if(cur_blocksize<0) {
                 System.out.println("Error");
@@ -415,8 +432,17 @@ public class Assignment2 {
                 for(int n=0;n<temp_docid.get(m).size();n++){
                     out.write(temp_docid.get(m).get(n));
                 }
-                for(int n=0;n<temp_fre.get(m).size();n++){
-                    out.write(temp_fre.get(m).get(n));
+                if(useQuant==0) {
+                    for (int n = 0; n < temp_fre.get(m).size(); n++) {
+                        out.write(temp_fre.get(m).get(n));
+                    }
+                }
+                else {
+                    //****
+                    List<Byte>CurrentScore=quantization(temp_fre_quant.get(m),Scorestatic);
+                    for (int n = 0; n < CurrentScore.size(); n++) {
+                        out.write(CurrentScore.get(n));
+                    }
                 }
             }
         }
@@ -510,16 +536,92 @@ public class Assignment2 {
         return temp;
     }
 
-
-
-
-
-    public static LinkedList<Byte> quantization(float n){
-        BitSet a=new BitSet();
-        return null;
+    public static LinkedList<Byte> toByteArray(int n){
+        LinkedList<Byte> result = new LinkedList<>();
+        int Listbit=8;
+        while(quantiBit>Listbit){
+            Listbit=Listbit*2;
+        }
+        for (int i=0;i<Listbit/8;i++){
+            int temp=n%127;
+            result.add((byte)(temp&0xff));
+            n=n/127;
+        }
+        return result;
     }
 
 
+
+    public static LinkedList<Byte> quantization(double n,List<Double>Scorestatic){
+        if (quantiFuc==0){
+            return uniform(n);
+        }
+        else if(quantiFuc==1){
+            return Leftexponential(n);
+        }
+        else if (quantiFuc==2){
+            return Rightexponential(n);
+        }
+        return null;
+    }
+    public static LinkedList<Byte> uniform(double input){
+        double bucketSize=50/Math.pow(2,quantiBit);
+        int quantizedValue=(int)(input/bucketSize);
+        if (quantizedValue<0)
+            quantizedValue=0;
+        if (quantizedValue>Math.pow(2,quantiBit)-1)
+            quantizedValue=(int)Math.pow(2,quantiBit)-1;
+        return toByteArray(quantizedValue);
+    }
+
+    public static LinkedList<Byte> Leftexponential(double input){
+        if(input<0)
+            input=0;
+        if (input>50)
+            input=50;
+        double currentVal=expQuant[0];
+        int index;
+        for (index=0;index<expQuant.length;index++){
+            if (input>currentVal){
+                currentVal+=expQuant[index];
+            }
+            else{
+                break;
+            }
+        }
+        return toByteArray(index);
+    }
+
+    public static LinkedList<Byte> Rightexponential(double input){
+        if(input<0)
+            input=0;
+        if (input>50)
+            input=50;
+        double currentVal=expQuant[expQuant.length-1];
+        int index;
+        for (index=expQuant.length-1;index>=0;index--){
+            if (input>currentVal){
+                currentVal+=expQuant[index];
+            }
+            else{
+                break;
+            }
+        }
+        return toByteArray(index);
+    }
+
+
+
+    public static double[] initialExp(){
+        double bucketNum=Math.pow(2,quantiBit-1);
+        double bucketsize=50*(base-1)/(Math.pow(base,bucketNum)-1);
+        double[]expBucket=new double[(int)Math.pow(2,quantiBit-1)];
+        for(int i=0;i<expBucket.length;i++){
+            expBucket[i]=bucketsize;
+            bucketsize=bucketsize*base;
+        }
+        return expBucket;
+    }
 
 
     /**
@@ -543,6 +645,10 @@ public class Assignment2 {
             quantiBit=myScanner.nextInt();
             System.out.println("pls enter which quantization function you want to use:");
             quantiFuc=myScanner.nextInt();
+            if(quantiFuc==1||quantiFuc==2){
+                System.out.println("pls enter base for exponential quantization:（must be larger than 1）");
+                base=myScanner.nextDouble();
+            }
         }
 
         merge(tempdoc_id-1);
